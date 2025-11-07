@@ -141,41 +141,6 @@ class Eget:
                     if self.verbose:
                         print(f"Error processing website: {e}")
 
-            # print(f"Searching for email for {website}")
-            # emails = self.findEmail(website)
-            # if emails:
-            #     # emails found in the provided url
-            #     self.writeEmails(emails, website)
-            # else:
-            #     # no emails found in the provided url, searching in commonly used contact urls
-            #     urls = []
-            #     # get base url to then append contact extensions
-            #     baseUrl = self.getBaseUrl(website)
-            #     if not baseUrl:
-            #         return
-            #     for extension in self.contactExtensions:
-            #         # append contact extensions to base url
-            #         urls.append(baseUrl+extension)
-            #     # append base url to array just in case
-            #     urls.append(baseUrl)
-                
-            #     # I dont like breaks so im doing a while loop. forgive me
-            #     i = 0
-            #     found = False
-            #     while i < len(urls) and found == False:
-            #         # choose url from the loop
-            #         url = urls[i]
-            #         # fetch emails for this url
-            #         emails = self.findEmail(url)
-            #         if emails:
-            #             # emails found
-            #             self.writeEmails(emails, url)
-            #             found = True
-            #         i  += 1
-            #     # if a url has not been found (and verbose flag is selected), log.
-            #     if not found:
-            #         print(f"No Emails found for {website}")
-
 if __name__ == "__main__":
     # import modules
     import re, requests, sys, argparse, time
