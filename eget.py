@@ -5,6 +5,7 @@ class Eget:
         self.outputPath = args.target
         self.verbose = args.verbose
         self.url = args.url
+        self.writeLock = threading.Lock()
 
         # turn CSV into 2D array
         with open(args.source, "r") as f:
@@ -44,7 +45,7 @@ class Eget:
     def safeGetRequest(self, url):
         try:
             # get HTML data, 5s timeout
-            response = requests.get(url, timeout=5)
+            response = requests.get(url, timeout=2)
             response.raise_for_status()
             # return HTML
             return response.text
@@ -85,15 +86,16 @@ class Eget:
 
     # function to write found emails to the output .csv file
     def writeEmails(self, emails, url):
-        with open(self.outputPath, "a") as f:
-            for email in emails:
-                # logging
-                print(f"Email found for {url}: {email}")
-                # writing the email
-                if self.url:
-                    f.write(f"{url},{email}\n")
-                else:
-                    f.write(f"{email}\n")
+        with self.writeLock:
+            with open(self.outputPath, "a") as f:
+                for email in emails:
+                    # logging
+                    print(f"Email found for {url}: {email}")
+                    # writing the email
+                    if self.url:
+                        f.write(f"{url},{email}\n")
+                    else:
+                        f.write(f"{email}\n")
 
     # function to search for emails in all the provided websites
     def startSearch(self):
@@ -107,45 +109,78 @@ class Eget:
             sys.exit(1)
         # lines present
         # try the provided url for each website
-        for website in self.data:
+        
+        # for website in self.data:
+
+        def websiteProcess(website):
             print(f"Searching for email for {website}")
             emails = self.findEmail(website)
             if emails:
-                # emails found in the provided url
                 self.writeEmails(emails, website)
-            else:
-                # no emails found in the provided url, searching in commonly used contact urls
-                urls = []
-                # get base url to then append contact extensions
-                baseUrl = self.getBaseUrl(website)
-                if not baseUrl:
-                    continue
-                for extension in self.contactExtensions:
-                    # append contact extensions to base url
-                    urls.append(baseUrl+extension)
-                # append base url to array just in case
-                urls.append(baseUrl)
+                return
+            baseUrl = self.getBaseUrl(website)
+            if not baseUrl:
+                return
+            for extension in self.contactExtensions:
+                url = baseUrl + extension
+                emails = self.findEmail(url)
+                if emails:
+                    self.writeEmails(emails, url)
+                    return
+            if self.verbose:
+                print(f"No Emails found for {website}")
+
+        # Limit to 10 threads to avoid overwhelming servers
+        with ThreadPoolExecutor(max_workers=30) as executor:
+            futures = [executor.submit(websiteProcess, website) for website in self.data]
+            for future in as_completed(futures):
+                # Handle exceptions cleanly
+                try:
+                    future.result()
+                except Exception as e:
+                    if self.verbose:
+                        print(f"Error processing website: {e}")
+
+            # print(f"Searching for email for {website}")
+            # emails = self.findEmail(website)
+            # if emails:
+            #     # emails found in the provided url
+            #     self.writeEmails(emails, website)
+            # else:
+            #     # no emails found in the provided url, searching in commonly used contact urls
+            #     urls = []
+            #     # get base url to then append contact extensions
+            #     baseUrl = self.getBaseUrl(website)
+            #     if not baseUrl:
+            #         return
+            #     for extension in self.contactExtensions:
+            #         # append contact extensions to base url
+            #         urls.append(baseUrl+extension)
+            #     # append base url to array just in case
+            #     urls.append(baseUrl)
                 
-                # I dont like breaks so im doing a while loop. forgive me
-                i = 0
-                found = False
-                while i < len(urls) and found == False:
-                    # choose url from the loop
-                    url = urls[i]
-                    # fetch emails for this url
-                    emails = self.findEmail(url)
-                    if emails:
-                        # emails found
-                        self.writeEmails(emails, url)
-                        found = True
-                    i  += 1
-                # if a url has not been found (and verbose flag is selected), log.
-                if not found:
-                    print(f"No Emails found for {website}")
+            #     # I dont like breaks so im doing a while loop. forgive me
+            #     i = 0
+            #     found = False
+            #     while i < len(urls) and found == False:
+            #         # choose url from the loop
+            #         url = urls[i]
+            #         # fetch emails for this url
+            #         emails = self.findEmail(url)
+            #         if emails:
+            #             # emails found
+            #             self.writeEmails(emails, url)
+            #             found = True
+            #         i  += 1
+            #     # if a url has not been found (and verbose flag is selected), log.
+            #     if not found:
+            #         print(f"No Emails found for {website}")
 
 if __name__ == "__main__":
     # import modules
     import re, requests, sys, argparse, time
+    import threading
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     # argparser for convenient argument parsing
     argParser = argparse.ArgumentParser(
         description="Scrape a websites for emails from a .csv")
