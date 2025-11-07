@@ -64,7 +64,7 @@ class Eget:
             # if any emails were found
             if emails:
                 # ignore emails with following substrings present (useless)
-                substrings = ["example", "domain", "wixpress", "filler", "sentry.io"]
+                substrings = ["example", "domain", "wixpress", "filler", "sentry.io", ".png", ".jpeg", ".jpg", ".webp", ".gov."]
                 emails = [email.lower() for email in emails if not any(sub in email for sub in substrings)]
                 # return email list (removed duplicates)
                 return list(set(emails))
