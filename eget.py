@@ -6,8 +6,11 @@ class Eget:
         self.verbose = args.verbose
 
         # turn CSV into a 2D array
+        self.data = []
         with open(args.source, "r") as f:
-            self.data = f.read().split("\n")
+            data = f.readlines()
+        for line in data:
+            self.data.append(line.strip().split(","))
         
         # define a list of common contact page extensions
         self.contactExtensions = [
@@ -54,16 +57,22 @@ class Eget:
     
     # function to search through HTML content for email matches
     def emailRegex(self, content):
-        # regex search
-        emails = re.findall(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}', content)
-        # if any emails were found
-        if emails:
-            # ignore emails with following substrings present (useless)
-            substrings = ["example", "domain", "wixpress", "filler", "sentry.io"]
-            emails = [email.lower() for email in emails if not any(sub in email for sub in substrings)]
-            # return email list (removed duplicates)
-            return list(set(emails))
-        return None
+        try:
+            # regex search
+            emails = re.findall(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}', content)
+            # if any emails were found
+            if emails:
+                # ignore emails with following substrings present (useless)
+                substrings = ["example", "domain", "wixpress", "filler", "sentry.io"]
+                emails = [email.lower() for email in emails if not any(sub in email for sub in substrings)]
+                # return email list (removed duplicates)
+                return list(set(emails))
+            return None
+        except Exception as e:
+            if self.verbose:
+                print(f"An error occurred: {e}")
+            else:
+                print("error")
 
     # function to find an email in HTML content
     def findEmail(self, url):
@@ -76,13 +85,13 @@ class Eget:
         return None
 
     # function to write found emails to the output .csv file
-    def writeEmails(self, emails, url):
+    def writeEmails(self, emails, url, line):
         with open(self.outputPath, "a") as f:
             for email in emails:
                 # logging
                 print(f"Email found for {url}: {email}")
                 # writing the email
-                f.write(f"{url},{email}\n")
+                f.write(f"{line[0]},{line[1]},{url},{email}\n")
 
     # function to search for emails in all the provided websites
     def startSearch(self):
@@ -96,11 +105,12 @@ class Eget:
             sys.exit(1)
         # lines present
         # try the provided url for each website
-        for website in self.data:
+        for line in self.data:
+            website = line[2]
             emails = self.findEmail(website)
             if emails:
                 # emails found in the provided url
-                self.writeEmails(emails, website)
+                self.writeEmails(emails, website, line)
             else:
                 # no emails found in the provided url, searching in commonly used contact urls
                 urls = []
@@ -122,7 +132,7 @@ class Eget:
                     emails = self.findEmail(url)
                     if emails:
                         # emails found
-                        self.writeEmails(emails, url)
+                        self.writeEmails(emails, url, line)
                         found = True
                     i  += 1
                 # if a url has not been found (and verbose flag is selected), log.
