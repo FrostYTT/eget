@@ -4,13 +4,11 @@ class Eget:
     def __init__(self, args):
         self.outputPath = args.target
         self.verbose = args.verbose
+        self.url = args.url
 
-        # turn CSV into a 2D array
-        self.data = []
+        # turn CSV into 2D array
         with open(args.source, "r") as f:
-            data = f.readlines()
-        for line in data:
-            self.data.append(line.strip().split(","))
+            self.data = f.read().split("\n")
         
         # define a list of common contact page extensions
         self.contactExtensions = [
@@ -34,8 +32,13 @@ class Eget:
 
     # function to isolate the base URL of any link
     def getBaseUrl(self, url):
-        baseUrl = re.search(r'https?://[^/]+', url).group(0)+"/"
-        return baseUrl
+        try:
+            baseUrl = re.search(r'https?://[^/]+', url).group(0)+"/"
+            return baseUrl
+        except Exception as e:
+            if self.verbose:
+                print(f"Invalid URL: {url}")
+            return None
 
     # function to get HTML from a URL with error checking
     def safeGetRequest(self, url):
@@ -50,8 +53,6 @@ class Eget:
             # print error type only with verbose flag
             if self.verbose:
                 print(f"An error occurred: {e}")
-            else:
-                print("Error")
             # return nothing on error
             return None
     
@@ -71,8 +72,6 @@ class Eget:
         except Exception as e:
             if self.verbose:
                 print(f"An error occurred: {e}")
-            else:
-                print("error")
 
     # function to find an email in HTML content
     def findEmail(self, url):
@@ -85,13 +84,16 @@ class Eget:
         return None
 
     # function to write found emails to the output .csv file
-    def writeEmails(self, emails, url, line):
+    def writeEmails(self, emails, url):
         with open(self.outputPath, "a") as f:
             for email in emails:
                 # logging
                 print(f"Email found for {url}: {email}")
                 # writing the email
-                f.write(f"{line[0]},{line[1]},{url},{email}\n")
+                if self.url:
+                    f.write(f"{url},{email}\n")
+                else:
+                    f.write(f"{email}\n")
 
     # function to search for emails in all the provided websites
     def startSearch(self):
@@ -105,17 +107,19 @@ class Eget:
             sys.exit(1)
         # lines present
         # try the provided url for each website
-        for line in self.data:
-            website = line[2]
+        for website in self.data:
+            print(f"Searching for email for {website}")
             emails = self.findEmail(website)
             if emails:
                 # emails found in the provided url
-                self.writeEmails(emails, website, line)
+                self.writeEmails(emails, website)
             else:
                 # no emails found in the provided url, searching in commonly used contact urls
                 urls = []
                 # get base url to then append contact extensions
                 baseUrl = self.getBaseUrl(website)
+                if not baseUrl:
+                    continue
                 for extension in self.contactExtensions:
                     # append contact extensions to base url
                     urls.append(baseUrl+extension)
@@ -132,13 +136,12 @@ class Eget:
                     emails = self.findEmail(url)
                     if emails:
                         # emails found
-                        self.writeEmails(emails, url, line)
+                        self.writeEmails(emails, url)
                         found = True
                     i  += 1
                 # if a url has not been found (and verbose flag is selected), log.
                 if not found:
-                    if self.verbose:
-                        print(f"No Emails found for {website}")
+                    print(f"No Emails found for {website}")
 
 if __name__ == "__main__":
     # import modules
@@ -150,6 +153,7 @@ if __name__ == "__main__":
     argParser.add_argument("target", default=None, help="Path to target file")
     argParser.add_argument("-v", "--verbose", action="store_true", help="Show emails as they're being found")
     argParser.add_argument("-s", "--statistics", action="store_true", help="Show statistics at the end of the run")
+    argParser.add_argument("-u", "--url", action="store_true", help="Include the URL in the output file")
     # parse args
     args = argParser.parse_args()
     # init class
@@ -168,11 +172,12 @@ if __name__ == "__main__":
             inputLines = len(f.readlines())
         with open(args.target, "r") as f:
             outputLines = len(f.readlines())
-        print(f"""\n\-----Statistics-----
+        print(f"""\n-----Statistics-----
 
 Time taken: {timeTaken}
 Websites Input: {inputLines}
 Emails found: {outputLines}
 Average success rate: {(outputLines/inputLines)*100}
 Average time per input website: {timeTaken/inputLines}
-Average time per output email: {timeTaken/outputLines}""")
+Average time per output email: {timeTaken/outputLines}
+""")
