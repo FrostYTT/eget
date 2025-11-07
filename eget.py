@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-class EmailFinder:
+# initialising eget class
+class Eget:
     def __init__(self, args):
         self.outputPath = args.target
         self.verbose = args.verbose
 
-        # turn csv into 2D array
+        # turn CSV into a 2D array
         with open(args.source, "r") as f:
             self.data = f.read().split("\n")
-        # self.data = []
-        # for line in data:
-        #     self.data.append(line.strip().split(","))
-        # input(self.data)
+        
+        # define a list of common contact page extensions
         self.contactExtensions = [
             "contact/",
             "contact-us/",
@@ -30,104 +29,140 @@ class EmailFinder:
             "contact-info/"
         ]
 
-
+    # function to isolate the base URL of any link
     def getBaseUrl(self, url):
         baseUrl = re.search(r'https?://[^/]+', url).group(0)+"/"
         return baseUrl
 
-    def safeCurl(self, url):
+    # function to get HTML from a URL with error checking
+    def safeGetRequest(self, url):
         try:
+            # get HTML data, 5s timeout
             response = requests.get(url, timeout=5)
             response.raise_for_status()
+            # return HTML
             return response.text
+        # Error
         except requests.exceptions.RequestException as e:
-            if "404" not in str(e):
-                if self.verbose:
-                    print(f"An error occurred: {e}")
-                else:
-                    print("Error")
+            # print error type only with verbose flag
+            if self.verbose:
+                print(f"An error occurred: {e}")
+            else:
+                print("Error")
+            # return nothing on error
             return None
     
+    # function to search through HTML content for email matches
     def emailRegex(self, content):
-        # emails = re.findall(r'[\w\.\-]+@[\w\-]+\.\D+\.?\D+', content)
+        # regex search
         emails = re.findall(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}', content)
+        # if any emails were found
         if emails:
+            # ignore emails with following substrings present (useless)
             substrings = ["example", "domain", "wixpress", "filler", "sentry.io"]
             emails = [email.lower() for email in emails if not any(sub in email for sub in substrings)]
-            # emails = [email for email in emails if "wixpress" not in email]
+            # return email list (removed duplicates)
             return list(set(emails))
         return None
 
+    # function to find an email in HTML content
     def findEmail(self, url):
-        content = self.safeCurl(url)
+        # fetch content from url
+        content = self.safeGetRequest(url)
         if content:
+            # return emails if existent
             return self.emailRegex(content)
+        # no HTML, return nothing
         return None
 
+    # function to write found emails to the output .csv file
     def writeEmails(self, emails, url):
         with open(self.outputPath, "a") as f:
             for email in emails:
+                # logging
                 print(f"Email found for {url}: {email}")
+                # writing the email
                 f.write(f"{url},{email}\n")
 
+    # function to search for emails in all the provided websites
     def startSearch(self):
+        # logging
         print("Starting Email Scraping...\n")
-        # checks for presence of lines in the CSV file provided
+        # checks for presence of lines in the csv file provided
         if len(self.data) == 0:
             # No lines
             print("Empty CSV file provided.")
-            return
+            # kill program
+            sys.exit(1)
         # lines present
-        # for each website in the csv make an array of urls to try
+        # try the provided url for each website
         for website in self.data:
             emails = self.findEmail(website)
             if emails:
+                # emails found in the provided url
                 self.writeEmails(emails, website)
             else:
+                # no emails found in the provided url, searching in commonly used contact urls
                 urls = []
+                # get base url to then append contact extensions
                 baseUrl = self.getBaseUrl(website)
                 for extension in self.contactExtensions:
+                    # append contact extensions to base url
                     urls.append(baseUrl+extension)
+                # append base url to array just in case
                 urls.append(baseUrl)
                 
-                counter = 0
+                # I dont like breaks so im doing a while loop. forgive me
+                i = 0
                 found = False
-                while counter < len(urls) and found == False:
-                    url = urls[counter]
+                while i < len(urls) and found == False:
+                    # choose url from the loop
+                    url = urls[i]
+                    # fetch emails for this url
                     emails = self.findEmail(url)
                     if emails:
+                        # emails found
                         self.writeEmails(emails, url)
                         found = True
-                    counter  += 1
+                    i  += 1
+                # if a url has not been found (and verbose flag is selected), log.
                 if not found:
                     if self.verbose:
                         print(f"No Emails found for {website}")
 
 if __name__ == "__main__":
-    import re, requests
-    import argparse
-    import time
+    # import modules
+    import re, requests, sys, argparse, time
+    # argparser for convenient argument parsing
     argParser = argparse.ArgumentParser(
         description="Scrape a websites for emails from a .csv")
     argParser.add_argument("source", default=None, help="Path to source file")
     argParser.add_argument("target", default=None, help="Path to target file")
     argParser.add_argument("-v", "--verbose", action="store_true", help="Show emails as they're being found")
     argParser.add_argument("-s", "--statistics", action="store_true", help="Show statistics at the end of the run")
+    # parse args
     args = argParser.parse_args()
-    emailFinder = EmailFinder(args)
+    # init class
+    eget = Eget(args)
+    # start timer for statistics
     start = time.time()
-    emailFinder.startSearch()
+    # start email scraping
+    eget.startSearch()
+    # end timer for statistics
     end = time.time()
+    # only run statistics if the statistics option is selected
     if args.statistics:
+        # self explanatory
         timeTaken = end - start
         with open(args.source, "r") as f:
             inputLines = len(f.readlines())
         with open(args.target, "r") as f:
             outputLines = len(f.readlines())
-        print("\n\nSTATS\n")
-        print(f"Time taken: {timeTaken}")
-        print(f"Websites Input: {inputLines}")
-        print(f"Emails found: {outputLines}")
-        print(f"Average success rate: {(outputLines/inputLines)*100}")
-        print(f"Average time per input website: {timeTaken/inputLines}")
-        print(f"Average time per output email: {timeTaken/outputLines}")
+        print(f"""\n\-----Statistics-----
+
+Time taken: {timeTaken}
+Websites Input: {inputLines}
+Emails found: {outputLines}
+Average success rate: {(outputLines/inputLines)*100}
+Average time per input website: {timeTaken/inputLines}
+Average time per output email: {timeTaken/outputLines}""")
